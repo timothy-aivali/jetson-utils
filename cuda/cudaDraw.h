@@ -68,6 +68,48 @@ cudaError_t cudaDrawCircle( T* image, size_t width, size_t height,
 }
 
 
+// add following functions
+
+/**
+ * cudaDrawCircle
+ * @ingroup drawing
+ */
+cudaError_t cudaDrawCircleOutline( void* input, void* output, size_t width, size_t height, imageFormat format, 
+					   int cx, int cy, float radius, const float4& color , float lineweight );
+	
+/**
+ * cudaDrawCircle
+ * @ingroup drawing
+ */
+template<typename T> 
+cudaError_t cudaDrawCircleOutline( T* input, T* output, size_t width, size_t height, 
+				 	   int cx, int cy, float radius, const float4& color, float lineweight )	
+{ 
+	return cudaDrawCircleOutline(input, output, width, height, imageFormatFromType<T>(), cx, cy, radius, color, lineweight ); 
+}	
+
+/**
+ * cudaDrawCircle (in-place)
+ * @ingroup drawing
+ */
+inline cudaError_t cudaDrawCircleOutline( void* image, size_t width, size_t height, imageFormat format, 
+					   int cx, int cy, float radius, const float4& color, float lineweight )
+{
+	return cudaDrawCircleOutline(image, image, width, height, format, cx, cy, radius, color, lineweight );
+}
+
+/**
+ * cudaDrawCircle (in-place)
+ * @ingroup drawing
+ */
+template<typename T> 
+cudaError_t cudaDrawCircleOutline( T* image, size_t width, size_t height, 
+				 	   int cx, int cy, float radius, const float4& color, float lineweight )	
+{ 
+	return cudaDrawCircleOutline(image, width, height, imageFormatFromType<T>(), cx, cy, radius, color, lineweight ); 
+}
+
+
 /**
  * cudaDrawLine
  * @ingroup drawing

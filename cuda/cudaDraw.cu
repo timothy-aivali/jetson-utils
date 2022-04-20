@@ -105,6 +105,73 @@ cudaError_t cudaDrawCircle( void* input, void* output, size_t width, size_t heig
 }
 
 
+// add following functions
+
+//----------------------------------------------------------------------------
+// Circle drawing outline (find if the distance to the circle - radius < acceptable)
+//----------------------------------------------------------------------------
+template<typename T>
+__global__ void gpuDrawCircleOutline( T* img, int imgWidth, int imgHeight, int offset_x, int offset_y, int cx, int cy, float radius2_inner, float radius2_outer, const float4 color )
+{
+	const int x = blockIdx.x * blockDim.x + threadIdx.x + offset_x;
+	const int y = blockIdx.y * blockDim.y + threadIdx.y + offset_y;
+
+	if( x >= imgWidth || y >= imgHeight || x < 0 || y < 0 )
+		return;
+
+	const int dx = x - cx;
+	const int dy = y - cy;
+
+	// if x,y is in the circle draw it
+	if(( dx * dx + dy * dy >= radius2_inner ) && ( dx * dx + dy * dy <= radius2_outer ))
+	{
+		const int idx = y * imgWidth + x;
+		img[idx] = cudaAlphaBlend(img[idx], color);
+	}
+}
+
+// cudaDrawCircleOutline
+cudaError_t cudaDrawCircleOutline( void* input, void* output, size_t width, size_t height, imageFormat format, int cx, int cy, float radius, const float4& color , float lineweight )
+{
+	if( !input || !output || width == 0 || height == 0 || radius <= 0 )
+		return cudaErrorInvalidValue;
+
+	// if the input and output images are different, copy the input to the output
+	// this is because we only launch the kernel in the approximate area of the circle
+	if( input != output )
+		CUDA(cudaMemcpy(output, input, imageFormatSize(format, width, height), cudaMemcpyDeviceToDevice));
+
+	// find a box around the circle
+	const int diameter = ceilf(radius * 2.0f);
+	const int offset_x = cx - radius;
+	const int offset_y = cy - radius;
+
+	// launch kernel
+	const dim3 blockDim(8, 8);
+	const dim3 gridDim(iDivUp(diameter,blockDim.x), iDivUp(diameter,blockDim.y));
+
+	#define LAUNCH_DRAW_CIRCLE_OUTLINE(type) \
+		gpuDrawCircleOutline<type><<<gridDim, blockDim>>>((type*)output, width, height, offset_x, offset_y, cx, cy, (radius-lineweight)*(radius-lineweight), radius*radius, color)
+
+	if( format == IMAGE_RGB8 )
+		LAUNCH_DRAW_CIRCLE_OUTLINE(uchar3);
+	else if( format == IMAGE_RGBA8 )
+		LAUNCH_DRAW_CIRCLE_OUTLINE(uchar4);
+	else if( format == IMAGE_RGB32F )
+		LAUNCH_DRAW_CIRCLE_OUTLINE(float3);
+	else if( format == IMAGE_RGBA32F )
+		LAUNCH_DRAW_CIRCLE_OUTLINE(float4);
+	else
+	{
+		imageFormatErrorMsg(LOG_CUDA, "cudaDrawCircleOutline()", format);
+		return cudaErrorInvalidValue;
+	}
+
+	return cudaGetLastError();
+}
+
+
+
 //----------------------------------------------------------------------------
 // Line drawing (find if the distance to the line <= line_width)
 // Distance from point to line segment - https://stackoverflow.com/a/1501725
