@@ -142,16 +142,16 @@ cudaError_t cudaDrawCircleOutline( void* input, void* output, size_t width, size
 		CUDA(cudaMemcpy(output, input, imageFormatSize(format, width, height), cudaMemcpyDeviceToDevice));
 
 	// find a box around the circle
-	const int diameter = ceilf(radius * 2.0f);
-	const int offset_x = cx - radius;
-	const int offset_y = cy - radius;
+	const int diameter = ceilf((radius + lineweight) * 2.0f);
+	const int offset_x = cx - radius - lineweight;
+	const int offset_y = cy - radius - lineweight;
 
 	// launch kernel
 	const dim3 blockDim(8, 8);
 	const dim3 gridDim(iDivUp(diameter,blockDim.x), iDivUp(diameter,blockDim.y));
 
 	#define LAUNCH_DRAW_CIRCLE_OUTLINE(type) \
-		gpuDrawCircleOutline<type><<<gridDim, blockDim>>>((type*)output, width, height, offset_x, offset_y, cx, cy, (radius-lineweight)*(radius-lineweight), radius*radius, color)
+		gpuDrawCircleOutline<type><<<gridDim, blockDim>>>((type*)output, width, height, offset_x, offset_y, cx, cy, (radius-lineweight)*(radius-lineweight), (radius+lineweight)*(radius+lineweight), color)
 
 	if( format == IMAGE_RGB8 )
 		LAUNCH_DRAW_CIRCLE_OUTLINE(uchar3);
