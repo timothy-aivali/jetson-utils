@@ -21,12 +21,12 @@
  */
 
 #include "gstDecoder.h"
+#include "gstWebRTC.h"
+
 #include "cudaColorspace.h"
-
-#include "logging.h"
 #include "filesystem.h"
+#include "logging.h"
 
-#include <gst/gst.h>
 #include <gst/app/gstappsink.h>
 #include <gst/pbutils/pbutils.h>
 
@@ -100,8 +100,11 @@ gstDecoder::gstDecoder( const videoOptions& options ) : videoSource(options)
 	mCustomRate = false;
 	mEOS        = false;
 	mLoopCount  = 1;
-
+	
 	mBufferManager = new gstBufferManager(&mOptions);
+	
+	mWebRTCServer = NULL;
+	mWebRTCConnected = false;
 }
 
 
@@ -109,7 +112,13 @@ gstDecoder::gstDecoder( const videoOptions& options ) : videoSource(options)
 gstDecoder::~gstDecoder()
 {
 	Close();
-
+	
+	if( mWebRTCServer != NULL )
+	{
+		mWebRTCServer->Release();
+		mWebRTCServer = NULL;
+	}
+	
 	if( mAppSink != NULL )
 	{
 		gst_object_unref(mAppSink);
@@ -196,8 +205,16 @@ bool gstDecoder::init()
 	// discover resource stats
 	if( !discover() )
 	{
-		if( mOptions.resource.protocol == "rtp" )
-			LogWarning(LOG_GSTREAMER "gstDecoder -- resource discovery not supported for RTP streams\n");		
+		if( mOptions.resource.protocol == "rtp" || mOptions.resource.protocol == "webrtc" )
+		{
+			LogWarning(LOG_GSTREAMER "gstDecoder -- resource discovery not supported for RTP/WebRTC streams\n");	
+
+			if( mOptions.codec == videoOptions::CODEC_UNKNOWN )
+			{
+				LogWarning(LOG_GSTREAMER "gstDecoder -- defaulting to H264 codec (you can change this with the --input-codec option)\n");
+				mOptions.codec = videoOptions::CODEC_H264;
+			}
+		}
 		else
 			LogError(LOG_GSTREAMER "gstDecoder -- resource discovery and auto-negotiation failed\n");
 
@@ -272,6 +289,19 @@ bool gstDecoder::init()
 	
 	gst_app_sink_set_callbacks(mAppSink, &cb, (void*)this, NULL);
 	
+	// create server for WebRTC streams
+	if( mOptions.resource.protocol == "webrtc" )
+	{
+		// create WebRTC server
+		mWebRTCServer = WebRTCServer::Create(mOptions.resource.port, mOptions.stunServer.c_str(),
+									  mOptions.sslCert.c_str(), mOptions.sslKey.c_str());
+		
+		if( !mWebRTCServer )
+			return false;
+		
+		mWebRTCServer->AddRoute(mOptions.resource.path.c_str(), onWebsocketMessage, this, WEBRTC_VIDEO|WEBRTC_RECEIVE|WEBRTC_PUBLIC);
+	}	
+	
 	return true;
 }
 
@@ -313,8 +343,8 @@ static GstDiscovererVideoInfo* findVideoStreamInfo( GstDiscovererStreamInfo* inf
 // discover
 bool gstDecoder::discover()
 {
-	// RTP streams can't be discovered
-	if( mOptions.resource.protocol == "rtp" )
+	// RTP streams and WebRTC connections can't be discovered
+	if( mOptions.resource.protocol == "rtp" || mOptions.resource.protocol == "webrtc" )
 		return false;
 
 	// create a new discovery interface
@@ -521,11 +551,20 @@ bool gstDecoder::buildLaunchStr()
 
 		mOptions.deviceType = videoOptions::DEVICE_IP;
 	}
-	else if( uri.protocol == "rtsp" )
+	else if( uri.protocol == "rtsp" || uri.protocol == "webrtc" )
 	{
-		ss << "rtspsrc location=" << uri.string;
-		ss << " latency=" << mOptions.rtspLatency;
-		ss << " ! queue ! ";
+		if( uri.protocol == "rtsp" )
+		{
+			ss << "rtspsrc location=" << uri.string;
+			ss << " latency=" << mOptions.rtspLatency;
+			ss << " ! queue ! ";
+		}
+		else
+		{
+			ss << "webrtcbin name=webrtcbin ";
+			ss << "stun-server=stun://" << WEBRTC_DEFAULT_STUN_SERVER;
+			ss << " ! queue ! ";
+		}
 		
 		if( mOptions.codec == videoOptions::CODEC_H264 )
 			ss << "rtph264depay ! h264parse ! ";
@@ -589,12 +628,23 @@ bool gstDecoder::buildLaunchStr()
 	// resize if requested
 	if( mCustomSize || mOptions.flipMethod != videoOptions::FLIP_NONE )
 	{
+	#if defined(__aarch64__)
 		ss << "nvvidconv";
 
 		if( mOptions.flipMethod != videoOptions::FLIP_NONE )
 			ss << " flip-method=" << (int)mOptions.flipMethod;
-
+		
 		ss << " ! video/x-raw";
+		
+	#elif defined(__x86_64__) || defined(__amd64__)
+		if( mOptions.flipMethod != videoOptions::FLIP_NONE )
+			ss << "videoflip method=" << videoOptions::FlipMethodToStr(mOptions.flipMethod) << " ! ";
+		
+		if( mOptions.width != 0 && mOptions.height != 0 )
+			ss << "videoscale ! ";
+		
+		ss << "video/x-raw";
+	#endif
 
 	#ifdef ENABLE_NVMM
 		ss << "(" << GST_CAPS_FEATURE_MEMORY_NVMM << ")";
@@ -684,7 +734,7 @@ GstFlowReturn gstDecoder::onPreroll( _GstAppSink* sink, void* user_data )
 
 
 // onBuffer
-GstFlowReturn gstDecoder::onBuffer(_GstAppSink* sink, void* user_data)
+GstFlowReturn gstDecoder::onBuffer( _GstAppSink* sink, void* user_data )
 {
 	//printf(LOG_GSTREAMER "gstDecoder -- onBuffer()\n");
 	
@@ -768,6 +818,10 @@ void gstDecoder::checkBuffer()
 // Capture
 bool gstDecoder::Capture( void** output, imageFormat format, uint64_t timeout )
 {
+	// update the webrtc server if needed
+	if( mWebRTCServer != NULL && !mWebRTCServer->IsThreaded() )
+		mWebRTCServer->ProcessRequests();
+	
 	// verify the output pointer exists
 	if( !output )
 		return false;
@@ -842,7 +896,7 @@ bool gstDecoder::Open()
 		}	
 	}
 
-	if( mStreaming )
+	if( mStreaming || (mWebRTCServer != NULL && !mWebRTCConnected) )  // with WebRTC, don't start the pipeline until peer connected
 		return true;
 
 	// transition pipline to STATE_PLAYING
@@ -917,4 +971,99 @@ void gstDecoder::checkMsgBus()
 }
 
 
+// onWebsocketMessage (WebRTC)
+void gstDecoder::onWebsocketMessage( WebRTCPeer* peer, const char* message, size_t message_size, void* user_data )
+{
+	if( !user_data )
+		return;
+	
+	gstDecoder* decoder = (gstDecoder*)user_data;
+	gstWebRTC::PeerContext* peer_context = (gstWebRTC::PeerContext*)peer->user_data;
+	
+	if( peer->flags & WEBRTC_PEER_CONNECTING )
+	{
+		LogVerbose(LOG_WEBRTC "new WebRTC peer connecting (%s, peer_id=%u)\n", peer->ip_address.c_str(), peer->ID);
+		
+		if( decoder->mWebRTCConnected )
+		{
+			LogError(LOG_WEBRTC "another WebRTC peer is already connected to gstDecoder, ignoring incoming connection\n");
+			return;
+		}
+
+		// new peer context
+		peer_context = new gstWebRTC::PeerContext();
+		peer->user_data = peer_context;
+		
+		// connect webrtcbin callbacks
+		peer_context->webrtcbin = gst_bin_get_by_name(GST_BIN(decoder->mPipeline), "webrtcbin");
+		g_assert_nonnull(peer_context->webrtcbin);
+		
+		g_signal_connect(peer_context->webrtcbin, "on-negotiation-needed", G_CALLBACK(gstWebRTC::onNegotiationNeeded), peer);
+		g_signal_connect(peer_context->webrtcbin, "on-ice-candidate", G_CALLBACK(gstWebRTC::onIceCandidate), peer);
+		
+		// create stream caps to advertise
+		std::ostringstream ss;
+		
+		ss << "application/x-rtp,media=video,encoding-name=";
+		ss << videoOptions::CodecToStr(decoder->mOptions.codec);
+		ss << ",payload=96,clock-rate=90000";
+		
+		if( decoder->mOptions.codec == videoOptions::CODEC_H264 )
+		{
+			// https://www.rfc-editor.org/rfc/rfc6184#section-8.1
+			// https://stackoverflow.com/questions/22960928/identify-h264-profile-and-level-from-profile-level-id-in-sdp
+			// https://en.wikipedia.org/wiki/Advanced_Video_Coding#Levels
+			//
+			// profile_idc:
+			//   0x42 = 66  => baseline
+			//   0x4D = 77  => main
+			//   0x64 = 100 => high
+			//
+			// profile_iop:
+			//   0x80 = 100000 => constraint_set0_flag=1, constraint_set1_flag=0 => ???
+			//   0xc0 = 110000 => constraint_set0_flag=1, constraint_set1_flag=1 => constrained
+			//
+			// levels_idc:  
+			//   0x16 = 22 = 4mbps  (720×480@15.0)
+			//   0x1E = 30 = 10mbps (720×480@15.0)
+			//   0x1F = 31 = 14mbps (1280×720@30.0)
+			ss << ",profile-level-id=(string)42c016";  // constrained baseline profile 2.2
+			ss << ",packetization-mode=(string)1";
+		}
+		
+		const std::string caps_str = ss.str();
+		LogVerbose(LOG_WEBRTC "gstDecoder -- configuring WebRTC recieve-only caps string: \n%s\n", caps_str.c_str());
+		
+		// add transciever in receive-only mode  (https://stackoverflow.com/questions/57430215/how-to-use-webrtcbin-create-offer-only-receive-video)
+		GstWebRTCRTPTransceiver* transceiver = NULL;
+		GstCaps* transceiver_caps = gst_caps_from_string(caps_str.c_str());
+		g_signal_emit_by_name(peer_context->webrtcbin, "add-transceiver", GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, transceiver_caps, &transceiver);
+		gst_caps_unref(transceiver_caps);
+		gst_object_unref(transceiver);
+		
+		// start the pipeline playing
+		decoder->mWebRTCConnected = true;		
+		decoder->Open();
+  
+		return;
+	}
+	else if( peer->flags & WEBRTC_PEER_CLOSED )
+	{
+		LogVerbose(LOG_WEBRTC "WebRTC peer disconnected (%s, peer_id=%u)\n", peer->ip_address.c_str(), peer->ID);
+		
+		if( peer_context != NULL )
+		{
+			if( peer_context->webrtcbin != NULL )
+				gst_object_unref(peer_context->webrtcbin);
+			
+			delete peer_context;
+			peer->user_data = NULL;
+		}
+
+		decoder->mWebRTCConnected = false;		
+		return;
+	}
+	
+	gstWebRTC::onWebsocketMessage(peer, message, message_size, user_data);
+}
 

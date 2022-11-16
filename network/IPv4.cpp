@@ -21,6 +21,8 @@
  */
  
 #include "IPv4.h"
+#include "Networking.h"
+#include "logging.h"
 
 #include <arpa/inet.h>
 #include <cstring>
@@ -29,13 +31,11 @@
 #include <ifaddrs.h>
 #include <errno.h>
 
-#include "logging.h"
 
-
-// IPv4Address
-bool IPv4Address( const char* str, uint32_t* ipOut )
+// IPv4AddressFromStr
+bool IPv4AddressFromStr( const char* str, uint32_t* ipAddress )
 {
-	if( !str || !ipOut )
+	if( !str || !ipAddress )
 		return false;
 
 	in_addr addr;
@@ -44,23 +44,26 @@ bool IPv4Address( const char* str, uint32_t* ipOut )
 
 	if( res != 1 )
 	{
-		LogError("IPv4Address() - failed to convert '%s' to valid IPv4 address\n", str);
+		LogError(LOG_NETWORK "IPv4AddressFromStr() failed to convert '%s' to valid IPv4 address\n", str);
 		return false;
 	}
 	
-	*ipOut = addr.s_addr;
+	*ipAddress = addr.s_addr;
 	return true;
 }
 
 
 // IPv4AddressStr
-std::string IPv4AddressStr( uint32_t ipAddress )
+std::string IPv4AddressToStr( uint32_t ipAddress )
 {
 	char str[INET_ADDRSTRLEN];
 	memset(str, 0, INET_ADDRSTRLEN);
 
 	if( inet_ntop(AF_INET, &ipAddress, str, INET_ADDRSTRLEN) == NULL )
-		LogError("IPv4AddressStr() - failed to convert 0x%08X to string\n", ipAddress);
+	{
+		LogError(LOG_NETWORK "IPv4AddressToStr() failed to convert 0x%08X to string\n", ipAddress);
+		return "";
+	}
 	
 	return std::string(str);
 }
