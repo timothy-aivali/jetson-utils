@@ -21,15 +21,16 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
-import sys
-import argparse
+import jetson.utils
 
-from jetson_utils import videoSource, videoOutput, logUsage
+import argparse
+import sys
+
 
 # parse command line
 parser = argparse.ArgumentParser(description="View various types of video streams", 
                                  formatter_class=argparse.RawTextHelpFormatter, 
-                                 epilog=videoSource.Usage() + videoOutput.Usage() + logUsage())
+                                 epilog=jetson.utils.videoSource.Usage() + jetson.utils.videoOutput.Usage() + jetson.utils.logUsage())
 
 parser.add_argument("input_URI", type=str, help="URI of the input stream")
 parser.add_argument("output_URI", type=str, default="", nargs='?', help="URI of the output stream")
@@ -42,8 +43,8 @@ except:
 	sys.exit(0)
 
 # create video sources & outputs
-input = videoSource(opt.input_URI, argv=sys.argv)
-output = videoOutput(opt.output_URI, argv=sys.argv)
+input = jetson.utils.videoSource(opt.input_URI, argv=sys.argv)
+output = jetson.utils.videoOutput(opt.output_URI, argv=sys.argv)
 
 # capture frames until user exits
 while output.IsStreaming():

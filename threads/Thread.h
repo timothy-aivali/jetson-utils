@@ -63,19 +63,18 @@ public:
 	 * Start the thread.  This will asynchronously call the Run() function.
 	 * @result False if an error occurred and the thread could not be started.
 	 */
-	bool Start();
+	bool StartThread();
 
 	/**
 	 * Start the thread, utilizing an entry function pointer provided by the user. 
 	 * @result False if an error occurred and the thread could not be started.
 	 */
-	bool Start( ThreadEntryFunction entry, void* user_param=NULL );
+	bool StartThread( ThreadEntryFunction entry, void* user_param=NULL );
 	
 	/**
-	 * Signal for the thread to stop running.
-	 * If wait is true, Stop() will block until the thread has exited.
+	 * Halt execution of the thread.
 	 */
-	void Stop( bool wait=false );
+	void StopThread();
 
 	/**
 	 * Prime the system for realtime use.  Mostly this is locking a large group of pages into memory.
@@ -117,6 +116,7 @@ public:
 	/**
 	 * Whatever thread you are calling from, yield the processor for the specified number of milliseconds.
 	 * Accuracy may vary wildly the lower you go, and depending on the platform.
+
 	 */
 	static void Yield( unsigned int ms );
 
@@ -143,6 +143,8 @@ public:
 	static int GetCPU();
 
 protected:
+
+
 
 	static void* DefaultEntry( void* param );
 

@@ -21,9 +21,8 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
+import jetson.utils
 import argparse
-
-from jetson_utils import glDisplay
 
 # parse the command line
 parser = argparse.ArgumentParser()
@@ -44,7 +43,7 @@ opt = parser.parse_args()
 print(opt)
 
 # create display device
-display = glDisplay(opt.title, opt.width, opt.height, opt.r, opt.g, opt.b, opt.a)
+display = jetson.utils.glDisplay(opt.title, opt.width, opt.height, opt.r, opt.g, opt.b, opt.a)
 
 if opt.maximized:
     display.SetMaximized(True)

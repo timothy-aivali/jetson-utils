@@ -21,10 +21,9 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
+import jetson.utils
 import argparse
 import numpy as np
-
-from jetson_utils import cudaAllocMapped, cudaDeviceSynchronize
 
 
 def test_numpy(x, y):
@@ -75,7 +74,7 @@ def test_pycuda(x, y):
     
     func = module.get_function('cuda_add')
     func(x, cuda.In(y), cuda.Out(result), block=(x.shape[0], x.shape[1], x.shape[2]))
-    cudaDeviceSynchronize()
+    jetson.utils.cudaDeviceSynchronize()
     
     print('pycuda kernel result:')
     print(result)
@@ -115,7 +114,7 @@ if __name__ == "__main__":
     print(args)
 
     # allocate cuda memory
-    cuda_img = cudaAllocMapped(width=args.width, height=args.height, format=args.format)
+    cuda_img = jetson.utils.cudaAllocMapped(width=args.width, height=args.height, format=args.format)
     print(cuda_img)
     
     # fill with monotonically increasing pattern

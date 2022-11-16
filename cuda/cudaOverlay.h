@@ -30,8 +30,7 @@
 
 /**
  * Overlay the input image onto the output image at location (x,y)
- * If the composted image doesn't entirely fit in the output, it will be cropped.
- * If the images have an alpha channel, they will be alpha blended. 
+ * If the composted image doesn't entirely fit in the output, it will be cropped. 
  * @ingroup overlay
  */
 cudaError_t cudaOverlay( void* input, size_t inputWidth, size_t inputHeight,
@@ -41,7 +40,6 @@ cudaError_t cudaOverlay( void* input, size_t inputWidth, size_t inputHeight,
 /**
  * Overlay the input image composted onto the output image at location (x,y)
  * If the composted image doesn't entirely fit in the output, it will be cropped.
- * If the images have an alpha channel, they will be alpha blended.
  * @ingroup overlay
  */
 template<typename T> 
@@ -55,7 +53,6 @@ cudaError_t cudaOverlay( T* input, size_t inputWidth, size_t inputHeight,
 /**
  * Overlay the input image composted onto the output image at location (x,y)
  * If the composted image doesn't entirely fit in the output, it will be cropped.
- * If the images have an alpha channel, they will be alpha blended.
  * @ingroup overlay
  */
 template<typename T> 

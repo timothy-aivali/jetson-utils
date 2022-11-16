@@ -59,15 +59,12 @@ PyObject* PyImageIO_Load( PyObject* self, PyObject* args, PyObject* kwds )
 	int   width  = 0;
 	int   height = 0;
 
-	Py_BEGIN_ALLOW_THREADS
-	
 	if( !loadImage(filename, &imgPtr, &width, &height, format) )
 	{
 		PyErr_SetString(PyExc_Exception, LOG_PY_UTILS "loadImage() failed to load image");
 		return NULL;
 	}
 		
-	Py_END_ALLOW_THREADS
 	return PyCUDA_RegisterImage(imgPtr, width, height, format, timestamp, true);
 }
 
@@ -105,15 +102,11 @@ PyObject* PyImageIO_LoadRGBA( PyObject* self, PyObject* args, PyObject* kwds )
 	int   width  = 0;
 	int   height = 0;
 
-	Py_BEGIN_ALLOW_THREADS
-	
 	if( !loadImage(filename, &imgPtr, &width, &height, format) )
 	{
 		PyErr_SetString(PyExc_Exception, LOG_PY_UTILS "loadImageRGBA() failed to load image");
 		return NULL;
 	}
-	
-	Py_END_ALLOW_THREADS
 		
 	// register memory container
 	PyObject* capsule = PyCUDA_RegisterImage(imgPtr, width, height, format, timestamp, true);
@@ -168,15 +161,13 @@ PyObject* PyImageIO_Save( PyObject* self, PyObject* args, PyObject* kwds )
 	}
 
 	// save the image
-	Py_BEGIN_ALLOW_THREADS
-	
 	if( !saveImage(filename, img->base.ptr, img->width, img->height, img->format, quality) )
 	{
 		PyErr_SetString(PyExc_Exception, LOG_PY_UTILS "saveImage() failed to save the image");
 		return NULL;
 	}
 
-	Py_END_ALLOW_THREADS
+	// return void
 	Py_RETURN_NONE;
 }
 
@@ -234,15 +225,11 @@ PyObject* PyImageIO_SaveRGBA( PyObject* self, PyObject* args, PyObject* kwds )
 			return NULL;
 		}
 
-		Py_BEGIN_ALLOW_THREADS
-		
 		if( !saveImageRGBA(filename, (float4*)mem->ptr, width, height, max_pixel, quality) )
 		{
 			PyErr_SetString(PyExc_Exception, LOG_PY_UTILS "saveImageRGBA() failed to save the image");
 			return NULL;
 		}
-		
-		Py_END_ALLOW_THREADS
 	}
 
 	// return void

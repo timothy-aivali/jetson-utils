@@ -411,8 +411,8 @@ inline void mat33_transform( T& x_out, T& y_out, const T x_in, const T y_in, con
 	const T y = mat[1][0] * x_in + mat[1][1] * y_in + mat[1][2];
 	const T z = mat[2][0] * x_in + mat[2][1] * y_in + mat[2][2];
 
-	x_out = x / z;
-	y_out = y / z;
+	x_out = x; // / z;
+	y_out = y; // / z;
 }
 
 
@@ -445,13 +445,9 @@ inline void mat33_transform( T* dst, const T* src, const int N, const T mat[3][3
 template<typename T>
 inline void mat33_transpose( T dst[3][3], const T src[3][3] )
 {
-	T tmp[3][3];
-	
 	for( uint32_t i=0; i < 3; i++ )
 		for( uint32_t j=0; j < 3; j++ )
-			tmp[i][j] = src[j][i];
-		
-	mat33_copy(dst, tmp);
+			dst[i][j] = src[j][i];
 }
 
 

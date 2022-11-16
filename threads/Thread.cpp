@@ -41,7 +41,7 @@ Thread::Thread()
 // destructor
 Thread::~Thread()
 {
-	Stop();
+	StopThread();
 }
 
 
@@ -67,20 +67,20 @@ void* Thread::DefaultEntry( void* param )
 }
 
 
-// Start
-bool Thread::Start()
+// StartThread
+bool Thread::StartThread()
 {
-	return Start(&Thread::DefaultEntry, this);
+	return StartThread(&Thread::DefaultEntry, this);
 }
 
 
-// Start
-bool Thread::Start( ThreadEntryFunction entry, void* user_param )
+// StartThread
+bool Thread::StartThread( ThreadEntryFunction entry, void* user_param )
 {
 	// make sure this thread object hasn't already been started
 	if( mThreadStarted )
 	{
-		LogError("thread already initialized\n");
+		LogError("Thread already initialized\n");
 		return false;
 	}
 
@@ -88,7 +88,7 @@ bool Thread::Start( ThreadEntryFunction entry, void* user_param )
 
 	if( pthread_create(&mThreadID, NULL, entry, user_param) != 0 )
 	{
-		LogError("thread failed to initialize\n");
+		LogError("Thread failed to initialize\n");
 		return false;
 	}
 
@@ -97,15 +97,10 @@ bool Thread::Start( ThreadEntryFunction entry, void* user_param )
 }
 
 
-// Stop
-void Thread::Stop( bool wait )
+// StopThread
+void Thread::StopThread()
 {
-	if( !mThreadStarted )
-		return;
-	
-	if( wait )
-		pthread_join(mThreadID, NULL);
-	
+	//pthread_join(mThreadID, NULL);
 	mThreadStarted = false;
 }
 

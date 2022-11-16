@@ -21,10 +21,9 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
+import jetson.utils
 import argparse
 import numpy as np
-
-from jetson_utils import cudaFromNumpy, saveImageRGBA
 
 # parse the command line
 parser = argparse.ArgumentParser(description='Copy a test image from numpy to CUDA and save it to disk')
@@ -57,10 +56,10 @@ for y in range(opt.height):
 		array[y, x] = px
 
 # copy to CUDA memory
-cuda_mem = cudaFromNumpy(array)
+cuda_mem = jetson.utils.cudaFromNumpy(array)
 print(cuda_mem)
 
 # save as image
-saveImageRGBA(opt.filename, cuda_mem, opt.width, opt.height)
+jetson.utils.saveImageRGBA(opt.filename, cuda_mem, opt.width, opt.height)
 print("saved {:d}x{:d} test image to '{:s}'".format(opt.width, opt.height, opt.filename))
 

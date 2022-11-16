@@ -70,15 +70,6 @@ void videoOptions::Print( const char* prefix ) const
 	LogInfo("  -- loop:       %i\n", loop);
 	LogInfo("  -- rtspLatency %i\n", rtspLatency);
 	
-	if( stunServer.length() > 0 )
-		LogInfo("  -- stunServer  %s\n", stunServer.c_str());
-
-	if( sslCert.length() > 0 )
-		LogInfo("  -- sslCert     %s\n", sslCert.c_str());
-	
-	if( sslKey.length() > 0 )
-		LogInfo("  -- sslKey      %s\n", sslKey.c_str());
-	
 	LogInfo("------------------------------------------------\n");
 }
 
@@ -176,22 +167,6 @@ bool videoOptions::Parse( const char* URI, const commandLine& cmdLine, videoOpti
 	// RTSP latency
 	rtspLatency = cmdLine.GetUnsignedInt("input-rtsp-latency", rtspLatency);
 	
-	// STUN server
-	const char* stunStr = cmdLine.GetString("stun-server");
-	
-	if( stunStr != NULL )
-		stunServer = stunStr;
-
-	// SSL certificate/key
-	const char* certStr = cmdLine.GetString("ssl-cert", cmdLine.GetString("https-cert"));
-	const char* keyStr = cmdLine.GetString("ssl-key", cmdLine.GetString("https-key"));
-	
-	if( certStr )
-		sslCert = certStr;
-	
-	if( keyStr )
-		sslKey = keyStr;
-
 	return true;
 }
 
@@ -346,13 +321,13 @@ const char* videoOptions::CodecToStr( videoOptions::Codec codec )
 	{
 		case CODEC_UNKNOWN:	return "unknown";
 		case CODEC_RAW:	return "raw";
-		case CODEC_H264:	return "H264";
-		case CODEC_H265:	return "H265";
-		case CODEC_VP8:	return "VP8";
-		case CODEC_VP9:	return "VP9";
-		case CODEC_MPEG2:	return "MPEG2";
-		case CODEC_MPEG4:	return "MPEG4";
-		case CODEC_MJPEG:	return "MJPEG";
+		case CODEC_H264:	return "h264";
+		case CODEC_H265:	return "h265";
+		case CODEC_VP8:	return "vp8";
+		case CODEC_VP9:	return "vp9";
+		case CODEC_MPEG2:	return "mpeg2";
+		case CODEC_MPEG4:	return "mpeg4";
+		case CODEC_MJPEG:	return "mjpeg";
 	}
 	return nullptr;
 }

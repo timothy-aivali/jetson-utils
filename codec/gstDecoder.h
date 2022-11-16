@@ -29,9 +29,6 @@
 #include "videoSource.h"
 
 
-// Forward declarations
-class WebRTCServer;
-struct WebRTCPeer;
 struct _GstAppSink;
 
 
@@ -142,30 +139,22 @@ protected:
 	
 	inline bool isLooping() const { return (mOptions.loop < 0) || ((mOptions.loop > 0) && (mLoopCount < mOptions.loop)); }
 
-	// appsink callbacks
 	static void onEOS(_GstAppSink* sink, void* user_data);
-	
 	static GstFlowReturn onPreroll(_GstAppSink* sink, void* user_data);
 	static GstFlowReturn onBuffer(_GstAppSink* sink, void* user_data);
 
-	// WebRTC callbacks
-	static void onWebsocketMessage( WebRTCPeer* peer, const char* message, size_t message_size, void* user_data );
-
-	GstBus*      mBus;
-	GstElement*  mPipeline;
+	_GstBus*     mBus;
 	_GstAppSink* mAppSink;
-	
-	Event	  mWaitEvent;
-	std::string mLaunchStr;
-	bool        mCustomSize;
-	bool		  mCustomRate;
-	bool        mEOS;
-	size_t	  mLoopCount;
+	_GstElement* mPipeline;
+
+	Event	   mWaitEvent;
+	std::string  mLaunchStr;
+	bool         mCustomSize;
+	bool		   mCustomRate;
+	bool         mEOS;
+	size_t	   mLoopCount;
 		
 	gstBufferManager* mBufferManager;
-	
-	WebRTCServer* mWebRTCServer;
-	bool mWebRTCConnected;
 };
   
 #endif

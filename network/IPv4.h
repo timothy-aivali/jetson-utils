@@ -30,29 +30,22 @@
  * Convert an IPv4 address string in "xxx.xxx.xxx.xxx" format to binary representation.
  *
  * @param str the IPv4 string, in "xxx.xxx.xxx.xxx" format
- * @param ipAddress output pointer to converted IPv4 address, in network byte order.
+ * @param ip_out output pointer to converted IPv4 address, in network byte order.
  *
  * @returns true, if str was a valid IPv4 address and the conversion was successful.
  *          false, if the conversion failed.
  *
  * @ingroup network
  */
-bool IPv4AddressFromStr( const char* str, uint32_t* ipAddress );
+bool IPv4Address( const char* str, uint32_t* ip_out );
 
 
 /**
  * Return text string of IPv4 address in "xxx.xxx.xxx.xxx" format
- * @param ipAddress IPv4 address, supplied in network byte order.
+ * @param ip_address IPv4 address, supplied in network byte order.
  * @ingroup network
  */
-std::string IPv4AddressToStr( uint32_t ipAddress );
+std::string IPv4AddressStr( uint32_t ip_address );
 
-
-/**
- * The size in bytes of an IPv4 address (4 bytes)
- * This is meant to compliment POSIX's INET4_ADDRSTRLEN (16)
- * @ingroup network
- */
-#define INET4_ADDRLEN 4
 
 #endif

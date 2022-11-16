@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,17 +20,35 @@
  * DEALINGS IN THE SOFTWARE.
  */
  
-#ifndef __PYTHON_BINDINGS_LOGGING__
-#define __PYTHON_BINDINGS_LOGGING__
+#ifndef __NETWORK_ADAPTER_H_
+#define __NETWORK_ADAPTER_H_
 
-#include "PyUtils.h"
+#include <string>
+#include <vector>
 
 
-// Register functions
-PyMethodDef* PyLogging_RegisterFunctions();
+/**
+ * Retrieve the host system's network hostname.
+ * @ingroup network
+ */
+std::string networkHostname();
 
-// Register types
-bool PyLogging_RegisterTypes( PyObject* module );
+
+/**
+ * Info about a particular network interface.
+ * @ingroup network
+ */
+struct networkAdapter_t
+{
+	std::string name;
+	std::string ipAddress;
+};
+
+/**
+ * Retrieve info about the different network interfaces of the system.
+ * @ingroup network
+ */
+void networkAdapters( std::vector<networkAdapter_t>& interfaceList );
 
 
 #endif

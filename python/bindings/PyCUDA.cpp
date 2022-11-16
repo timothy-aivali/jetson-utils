@@ -606,34 +606,24 @@ static PyObject* PyCudaImage_GetItem(PyCudaImage *self, PyObject *key)
 	
 	// apply offset to the data pointer
 	uint8_t* ptr = ((uint8_t*)self->base.ptr) + offset;
-	const imageBaseType baseType = imageFormatBaseType(self->format);
-	
-	if( numComponents > 1 )
-	{
-		// return the pixel as a tuple
-		PyObject* tuple = PyTuple_New(numComponents);
-		
-		for( int n=0; n < numComponents; n++ )
-		{
-			PyObject* component = NULL;
 
-			if( baseType == IMAGE_FLOAT )
-				component = PyFloat_FromDouble(((float*)ptr)[n]);
-			else if( baseType == IMAGE_UINT8 )
-				component = PYLONG_FROM_UNSIGNED_LONG(ptr[n]);
-			
-			PyTuple_SetItem(tuple, n, component);
-		}
-		
-		return tuple;
-	}
-	else
+	// return the pixel as a tuple
+	PyObject* tuple = PyTuple_New(numComponents);
+	const imageBaseType baseType = imageFormatBaseType(self->format);
+
+	for( int n=0; n < numComponents; n++ )
 	{
+		PyObject* component = NULL;
+
 		if( baseType == IMAGE_FLOAT )
-			return PyFloat_FromDouble(((float*)ptr)[0]);
+			component = PyFloat_FromDouble(((float*)ptr)[n]);
 		else if( baseType == IMAGE_UINT8 )
-			return PYLONG_FROM_UNSIGNED_LONG(ptr[0]);
+			component = PYLONG_FROM_UNSIGNED_LONG(ptr[n]);
+		
+		PyTuple_SetItem(tuple, n, component);
 	}
+
+	return tuple;
 }
 
 // PyCudaImage_SetItem
@@ -1060,28 +1050,16 @@ PyObject* PyCUDA_AllocMapped( PyObject* self, PyObject* args, PyObject* kwds )
 	float width = 0;
 	float height = 0;
 	long long timestamp = 0;
-	PyObject* pyImageLike = NULL;
-	
-	const char* formatStr = NULL;
-	static char* kwlist[] = {"size", "width", "height", "format", "timestamp", "like", NULL};
 
-	if( !PyArg_ParseTupleAndKeywords(args, kwds, "|iffsLO", kwlist, &size, &width, &height, &formatStr, &timestamp, &pyImageLike))
+	const char* formatStr = NULL;
+	static char* kwlist[] = {"size", "width", "height", "format", "timestamp", NULL};
+
+	if( !PyArg_ParseTupleAndKeywords(args, kwds, "|iffsL", kwlist, &size, &width, &height, &formatStr, &timestamp))
 	{
 		PyErr_SetString(PyExc_Exception, LOG_PY_UTILS "cudaAllocMapped() failed to parse arguments");
 		return NULL;
 	}
 
-	imageFormat format = imageFormatFromStr(formatStr);
-	
-	if( pyImageLike != NULL )
-	{
-		PyCudaImage* image_like = PyCUDA_GetImage(pyImageLike);
-		
-		width = image_like->width;
-		height = image_like->height;
-		format = image_like->format;
-	}
-	
 	if( size <= 0 && (width <= 0 || height <= 0) )
 	{
 		PyErr_SetString(PyExc_Exception, LOG_PY_UTILS "cudaAllocMapped() requested size/dimensions are negative or zero");
@@ -1095,6 +1073,7 @@ PyObject* PyCUDA_AllocMapped( PyObject* self, PyObject* args, PyObject* kwds )
 	}
 
 	const bool isImage = (width > 0) && (height > 0);
+	const imageFormat format = imageFormatFromStr(formatStr);
 
 	if( isImage && format == IMAGE_UNKNOWN )
 	{
@@ -1287,16 +1266,13 @@ PyObject* PyCUDA_Resize( PyObject* self, PyObject* args, PyObject* kwds )
 	PyObject* pyInput  = NULL;
 	PyObject* pyOutput = NULL;
 	
-	const char* filter_str = "point";
-	static char* kwlist[] = {"input", "output", "filter", NULL};
+	static char* kwlist[] = {"input", "output", NULL};
 
-	if( !PyArg_ParseTupleAndKeywords(args, kwds, "OO|s", kwlist, &pyInput, &pyOutput, &filter_str))
+	if( !PyArg_ParseTupleAndKeywords(args, kwds, "OO", kwlist, &pyInput, &pyOutput))
 	{
 		PyErr_SetString(PyExc_Exception, LOG_PY_UTILS "cudaResize() failed to parse args");
 		return NULL;
 	}
-	
-	const cudaFilterMode filter_mode = cudaFilterModeFromStr(filter_str);
 	
 	// get pointers to image data
 	PyCudaImage* input = PyCUDA_GetImage(pyInput);
@@ -1315,7 +1291,7 @@ PyObject* PyCUDA_Resize( PyObject* self, PyObject* args, PyObject* kwds )
 	}
 
 	// run the CUDA function
-	if( CUDA_FAILED(cudaResize(input->base.ptr, input->width, input->height, output->base.ptr, output->width, output->height, output->format, filter_mode)) )
+	if( CUDA_FAILED(cudaResize(input->base.ptr, input->width, input->height, output->base.ptr, output->width, output->height, output->format)) )
 	{
 		PyErr_SetString(PyExc_Exception, LOG_PY_UTILS "cudaResize() failed");
 		return NULL;

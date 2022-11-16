@@ -21,7 +21,6 @@
  */
 
 #include "gstEncoder.h"
-#include "gstWebRTC.h"
 
 #include "filesystem.h"
 #include "timespec.h"
@@ -29,8 +28,7 @@
 
 #include "cudaColorspace.h"
 
-#define GST_USE_UNSTABLE_API
-#include <gst/webrtc/webrtc.h>
+#include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
 
 #include <sstream>
@@ -69,12 +67,12 @@ bool gstEncoder::IsSupportedExtension( const char* ext )
 // constructor
 gstEncoder::gstEncoder( const videoOptions& options ) : videoOutput(options)
 {	
-	mAppSrc       = NULL;
-	mBus          = NULL;
-	mBufferCaps   = NULL;
-	mPipeline     = NULL;
-	mWebRTCServer = NULL;
-	mNeedData     = false;
+	mAppSrc     = NULL;
+	mBus        = NULL;
+	mBufferCaps = NULL;
+	mPipeline   = NULL;
+	mNeedData   = false;
+	mOutputPort = 0;
 
 	mBufferYUV.SetThreaded(false);
 }
@@ -85,12 +83,6 @@ gstEncoder::~gstEncoder()
 {
 	Close();
 
-	if( mWebRTCServer != NULL )
-	{
-		mWebRTCServer->Release();
-		mWebRTCServer = NULL;
-	}
-	
 	if( mAppSrc != NULL )
 	{
 		gst_object_unref(mAppSrc);
@@ -217,17 +209,17 @@ bool gstEncoder::init()
 	g_signal_connect(appsrcElement, "need-data", G_CALLBACK(onNeedData), this);
 	g_signal_connect(appsrcElement, "enough-data", G_CALLBACK(onEnoughData), this);
 
-	// create server for WebRTC streams
-	if( mOptions.resource.protocol == "webrtc" )
-	{
-		mWebRTCServer = WebRTCServer::Create(mOptions.resource.port, mOptions.stunServer.c_str(),
-									  mOptions.sslCert.c_str(), mOptions.sslKey.c_str());
-		
-		if( !mWebRTCServer )
-			return false;
-		
-		mWebRTCServer->AddRoute(mOptions.resource.path.c_str(), onWebsocketMessage, this, WEBRTC_VIDEO|WEBRTC_SEND|WEBRTC_PUBLIC|WEBRTC_MULTI_CLIENT);
-	}		
+#if GST_CHECK_VERSION(1,0,0)
+	//gst_app_src_set_caps(appsrc, mBufferCaps);
+#endif
+	
+#if 0
+	// set stream properties (note: these are now set in the pipeline)
+	gst_app_src_set_stream_type(appsrc, GST_APP_STREAM_TYPE_STREAM);
+	
+	g_object_set(G_OBJECT(mAppSrc), "is-live", TRUE, NULL); 
+	g_object_set(G_OBJECT(mAppSrc), "do-timestamp", TRUE, NULL); 
+#endif
 
 	return true;
 }
@@ -357,7 +349,7 @@ bool gstEncoder::buildLaunchStr()
 
 		mOptions.deviceType = videoOptions::DEVICE_FILE;
 	}
-	else if( uri.protocol == "rtp" || uri.protocol == "webrtc" )
+	else if( uri.protocol == "rtp" )
 	{
 		if( mOptions.codec == videoOptions::CODEC_H264 )
 			ss << "rtph264pay";
@@ -370,42 +362,11 @@ bool gstEncoder::buildLaunchStr()
 		else if( mOptions.codec == videoOptions::CODEC_MJPEG )
 			ss << "rtpjpegpay";
 
-		if( mOptions.codec == videoOptions::CODEC_H264 || mOptions.codec == videoOptions::CODEC_H265 ) 
-			ss << " config-interval=1";
-		
-		ss << " ! ";
-		
-		if( uri.protocol == "rtp" )
-		{
-			ss << "udpsink host=" << uri.location << " ";
-
-			if( uri.port != 0 )
-				ss << "port=" << uri.port;
-
-			ss << " auto-multicast=true";
+		if (mOptions.codec == videoOptions::CODEC_H264 || mOptions.codec == videoOptions::CODEC_H265) {
+				ss << " config-interval=1 ! udpsink host=";
+		} else {
+				ss << " ! udpsink host=";
 		}
-		else if( uri.protocol == "webrtc" )
-		{
-			ss << "application/x-rtp,media=video,encoding-name=" << videoOptions::CodecToStr(mOptions.codec) << ",payload=96 ! ";
-			//ss << "webrtcbin name=webrtcbin stun-server=" << STUN_SERVER;
-			ss << "tee name=videotee ! queue ! fakesink";  // webrtcbin's will be added when clients connect
-		}
-		
-		mOptions.deviceType = videoOptions::DEVICE_IP;
-	}
-	else if( uri.protocol == "rtpmp2ts" )
-	{
-		// https://forums.developer.nvidia.com/t/gstreamer-udp-to-vlc/215349/5
-		if( mOptions.codec == videoOptions::CODEC_H264 ) 
-			ss << "h264parse config-interval=1 ! mpegtsmux ! rtpmp2tpay ! udpsink host=";
-		else if (mOptions.codec == videoOptions::CODEC_H265 )
-			ss << "h265parse config-interval=1 ! mpegtsmux ! rtpmp2tpay ! udpsink host=";
-		else
-		{
-			LogError(LOG_GSTREAMER "gstEncoder -- rtpmp2ts output only supports h264 and h265. Unsupported codec (%s)\n", uri.extension.c_str());
-			return false;
-		}
- 		
 		ss << uri.location << " ";
 
 		if( uri.port != 0 )
@@ -422,11 +383,6 @@ bool gstEncoder::buildLaunchStr()
 
 		mOptions.deviceType = videoOptions::DEVICE_IP;
 	}
-	else
-	{
-		LogError(LOG_GSTREAMER "gstEncoder -- invalid protocol (%s)\n", uri.protocol.c_str());
-		return false;
-	}
 
 	mLaunchStr = ss.str();
 
@@ -440,7 +396,7 @@ bool gstEncoder::buildLaunchStr()
 // onNeedData
 void gstEncoder::onNeedData( GstElement* pipeline, guint size, gpointer user_data )
 {
-	//LogDebug(LOG_GSTREAMER "gstEncoder -- appsrc requesting data (%u bytes)\n", size);
+	LogDebug(LOG_GSTREAMER "gstEncoder -- appsrc requesting data (%u bytes)\n", size);
 	
 	if( !user_data )
 		return;
@@ -565,11 +521,6 @@ bool gstEncoder::encodeYUV( void* buffer, size_t size )
 // Render
 bool gstEncoder::Render( void* image, uint32_t width, uint32_t height, imageFormat format )
 {
-	// update the webrtc server if needed
-	if( mWebRTCServer != NULL && !mWebRTCServer->IsThreaded() )
-		mWebRTCServer->ProcessRequests();	
-	
-	// verify image dimensions
 	if( !image || width == 0 || height == 0 )
 		return false;
 
@@ -644,8 +595,6 @@ bool gstEncoder::Open()
 
 	if( result == GST_STATE_CHANGE_ASYNC )
 	{
-		LogDebug(LOG_GSTREAMER "gstEncoder -- queued state to GST_STATE_PLAYING => GST_STATE_CHANGE_ASYNC\n");
-		
 #if 0
 		GstMessage* asyncMsg = gst_bus_timed_pop_filtered(mBus, 5 * GST_SECOND, 
     	 					      (GstMessageType)(GST_MESSAGE_ASYNC_DONE|GST_MESSAGE_ERROR)); 
@@ -722,117 +671,4 @@ void gstEncoder::checkMsgBus()
 }
 
 
-// onWebsocketMessage
-void gstEncoder::onWebsocketMessage( WebRTCPeer* peer, const char* message, size_t message_size, void* user_data )
-{
-	if( !user_data )
-		return;
-	
-	gstEncoder* encoder = (gstEncoder*)user_data;
-	gstWebRTC::PeerContext* peer_context = (gstWebRTC::PeerContext*)peer->user_data;
-	
-	if( peer->flags & WEBRTC_PEER_CONNECTING )
-	{
-		LogVerbose(LOG_WEBRTC "new WebRTC peer connecting (%s, peer_id=%u)\n", peer->ip_address.c_str(), peer->ID);
-		
-		// new peer context
-		peer_context = new gstWebRTC::PeerContext();
-		peer->user_data = peer_context;
-		
-		// create a new queue element
-		gchar* tmp = g_strdup_printf("queue-%u", peer->ID);
-		peer_context->queue = gst_element_factory_make("queue", tmp);
-		g_assert_nonnull(peer_context->queue);
-		gst_object_ref(peer_context->queue);
-		g_free(tmp);
-		
-		// create a new webrtcbin element
-		tmp = g_strdup_printf("webrtcbin-%u", peer->ID);
-		peer_context->webrtcbin = gst_element_factory_make("webrtcbin", tmp);
-		g_assert_nonnull(peer_context->webrtcbin);
-		gst_object_ref(peer_context->webrtcbin);
-		g_free(tmp);
-		
-		// set webrtcbin properties
-		std::string stun_server = std::string("stun://") + peer->server->GetSTUNServer();
-		g_object_set(peer_context->webrtcbin, "stun-server", stun_server.c_str(), NULL);
-		//g_object_set(peer_context->webrtcbin, "latency", 40, NULL);   // this doesn't seem to have an impact
-	
-		// add queue and webrtcbin elements to the pipeline
-		gst_bin_add_many(GST_BIN(encoder->mPipeline), peer_context->queue, peer_context->webrtcbin, NULL);
-		
-		// link the queue to webrtc bin
-		GstPad* srcpad = gst_element_get_static_pad(peer_context->queue, "src");
-		g_assert_nonnull(srcpad);
-		GstPad* sinkpad = gst_element_get_request_pad(peer_context->webrtcbin, "sink_%u");
-		g_assert_nonnull(sinkpad);
-		int ret = gst_pad_link(srcpad, sinkpad);
-		g_assert_cmpint(ret, ==, GST_PAD_LINK_OK);
-		gst_object_unref(srcpad);
-		gst_object_unref(sinkpad);
-		
-		// link the queue to the tee
-		GstElement* tee = gst_bin_get_by_name(GST_BIN(encoder->mPipeline), "videotee");
-		g_assert_nonnull(tee);
-		srcpad = gst_element_get_request_pad(tee, "src_%u");
-		g_assert_nonnull(srcpad);
-		gst_object_unref(tee);
-		sinkpad = gst_element_get_static_pad(peer_context->queue, "sink");
-		g_assert_nonnull(sinkpad);
-		ret = gst_pad_link(srcpad, sinkpad);
-		g_assert_cmpint(ret, ==, GST_PAD_LINK_OK);
-		gst_object_unref(srcpad);
-		gst_object_unref(sinkpad);
-		
-		// set transciever to send-only mode
-		GArray* transceivers = NULL;
-		
-		g_signal_emit_by_name(peer_context->webrtcbin, "get-transceivers", &transceivers);
-		g_assert(transceivers != NULL && transceivers->len > 0);
-		
-		GstWebRTCRTPTransceiver* transceiver = g_array_index(transceivers, GstWebRTCRTPTransceiver*, 0);
-		g_object_set(transceiver, "direction", GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_SENDONLY, NULL);
-		g_array_unref(transceivers);
-		
-		// subscribe to callbacks
-		g_signal_connect(peer_context->webrtcbin, "on-negotiation-needed", G_CALLBACK(gstWebRTC::onNegotiationNeeded), peer);
-		g_signal_connect(peer_context->webrtcbin, "on-ice-candidate", G_CALLBACK(gstWebRTC::onIceCandidate), peer);
-		
-		// Set to pipeline branch to PLAYING
-		ret = gst_element_sync_state_with_parent(peer_context->queue);
-		g_assert_true(ret);
-		ret = gst_element_sync_state_with_parent(peer_context->webrtcbin);
-		g_assert_true(ret);
-		
-		return;
-	}
-	else if( peer->flags & WEBRTC_PEER_CLOSED )
-	{
-		LogVerbose(LOG_WEBRTC "WebRTC peer disconnected (%s, peer_id=%u)\n", peer->ip_address.c_str(), peer->ID);
-		
-		// remove webrtcbin from pipeline
-		gst_bin_remove(GST_BIN(encoder->mPipeline), peer_context->webrtcbin);
-		gst_element_set_state(peer_context->webrtcbin, GST_STATE_NULL);
-		gst_object_unref(peer_context->webrtcbin);
 
-		// disconnect queue pads
-		GstPad* sinkpad = gst_element_get_static_pad(peer_context->queue, "sink");
-		g_assert_nonnull(sinkpad);
-		GstPad* srcpad = gst_pad_get_peer(sinkpad);
-		g_assert_nonnull(srcpad);
-		gst_object_unref(sinkpad);
-  
-		// remove queue from pipeline
-		gst_bin_remove(GST_BIN(encoder->mPipeline), peer_context->queue);
-		gst_element_set_state(peer_context->queue, GST_STATE_NULL);
-		gst_object_unref(peer_context->queue);
-
-		// free encoder-specific context
-		delete peer_context;
-		peer->user_data = NULL;
-		
-		return;
-	}
-	
-	gstWebRTC::onWebsocketMessage(peer, message, message_size, user_data);
-}
