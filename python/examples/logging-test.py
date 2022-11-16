@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -21,37 +21,25 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
-import argparse
-import numpy
+from jetson_utils import Log
 
-from jetson_utils import cudaAllocMapped, cudaToNumpy
+def log_messages():
+    Log.Error('this is an error message')
+    Log.Warning('this is a warning message')
+    Log.Info('this is an info message')
+    Log.Verbose('this is a verbose message')
+    Log.Debug('this is a debug message')
 
-# parse the command line
-parser = argparse.ArgumentParser('Map CUDA to memory to numpy ndarray')
+Log.Info(f"initial logging level:  {Log.GetLevel()}")
 
-parser.add_argument("--width", type=int, default=4, help="width of the array (in float elements)")
-parser.add_argument("--height", type=int, default=2, help="height of the array (in float elements)")
+log_messages()
 
-opt = parser.parse_args()
+Log.SetLevel('debug')
+Log.Info(f"new logging level:  {Log.GetLevel()}")
 
-# allocate cuda memory
-cuda_img = cudaAllocMapped(width=opt.width, height=opt.height, format='rgb32f')
-print(cuda_img)
+log_messages()
 
-# create a numpy ndarray that references the CUDA memory
-# it won't be copied, but uses the same memory underneath
-array = cudaToNumpy(cuda_img)
+Log.SetLevel('info')
+Log.Info(f"new logging level:  {Log.GetLevel()}")
 
-print("\ncudaToNumpy() array:")
-print(type(array))
-print(array.dtype)
-print(array.shape)	# numpy dims will be in (height, width, depth) order
-print(array)
-
-# create another ndarray and do some ops with it
-array2 = numpy.ones(array.shape, numpy.float32)
-
-print("\nadding arrays...\n")
-print(array + array2)
-
-
+log_messages()

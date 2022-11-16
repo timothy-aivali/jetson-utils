@@ -114,8 +114,11 @@ int main( int argc, char** argv )
 			continue;
 		}
 
-		LogInfo("video-viewer:  captured %u frames (%u x %u)\n", ++numFrames, inputStream->GetWidth(), inputStream->GetHeight());
-
+		if( numFrames % 25 == 0 || numFrames < 15 )
+			LogInfo("video-viewer:  captured %u frames (%u x %u)\n", numFrames, inputStream->GetWidth(), inputStream->GetHeight());
+		
+		numFrames++;
+		
 		if( outputStream != NULL )
 		{
 			outputStream->Render(nextFrame, inputStream->GetWidth(), inputStream->GetHeight());

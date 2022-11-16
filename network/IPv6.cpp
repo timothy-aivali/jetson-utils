@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,8 +20,9 @@
  * DEALINGS IN THE SOFTWARE.
  */
  
-#include "NetworkAdapter.h"
-#include "IPv4.h"
+#include "IPv6.h"
+#include "Networking.h"
+#include "logging.h"
 
 #include <arpa/inet.h>
 #include <cstring>
@@ -30,50 +31,44 @@
 #include <ifaddrs.h>
 #include <errno.h>
 
-#include "logging.h"
 
-
-// networkHostname
-std::string networkHostname()
+// IPv6AddressFromStr
+bool IPv6AddressFromStr( const char* str, void* ipAddress )
 {
-	char str[256];
+	if( !str || !ipAddress )
+		return false;
 
-	if( gethostname(str, sizeof(str)) != 0 )
-		return "<error>";
-	
-	return str;
-}
+	in6_addr addr;
 
+	const int res = inet_pton(AF_INET6, str, &addr);
 
-// networkAdapters
-void networkAdapters( std::vector<networkAdapter_t>& interfaceList )
-{
-	struct ifaddrs* addrs;
-
-	if( getifaddrs(&addrs) < 0 )
-	{ 
-		const int e = errno;
-		const char* err = strerror(e);
-		LogError("Network error %i : %s\n", e, err );
-	}
-
-	LogVerbose("Network Interfaces:\n");
-
-	for( ifaddrs* n=addrs; n != NULL; n = n->ifa_next )
+	if( res != 1 )
 	{
-		if( n->ifa_addr->sa_family != AF_INET /*AF_INET6*/ )
-			continue;
-
-		if( !addrs->ifa_name || strlen(addrs->ifa_name) == 0 )
-			continue;
-
-		networkAdapter_t entry;
-
-		entry.name      = addrs->ifa_name;
-		entry.ipAddress = IPv4AddressStr(((sockaddr_in*)n->ifa_addr)->sin_addr.s_addr);
-
-		LogVerbose("  - %s %s\n", entry.name.c_str(), entry.ipAddress.c_str());
-
-		interfaceList.push_back(entry);
+		LogError(LOG_NETWORK "IPv6AddressFromStr() failed to convert '%s' to valid IPv6 address\n", str);
+		return false;
 	}
+	
+	memcpy(ipAddress, addr.s6_addr, INET6_ADDRLEN);
+	return true;
 }
+
+
+// IPv6AddressToStr
+std::string IPv6AddressToStr( void* ipAddress )
+{
+	if( !ipAddress )
+		return "";
+	
+	char str[INET6_ADDRSTRLEN];
+	memset(str, 0, INET6_ADDRSTRLEN);
+
+	if( inet_ntop(AF_INET6, ipAddress, str, INET6_ADDRSTRLEN) == NULL )
+	{
+		uint16_t* i = (uint16_t*)ipAddress;
+		LogError("IPv6AddressToStr() failed to convert %04hX:%04hX:%04hX:%04hX:%04hX:%04hX:%04hX:%04hX to string\n", i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]);
+		return "";
+	}
+	
+	return std::string(str);
+}
+
